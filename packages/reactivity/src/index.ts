@@ -8,7 +8,9 @@ export {
   customRef,
   triggerRef,
   Ref,
-  UnwrapRef
+  UnwrapRef,
+  ToRefs,
+  RefUnwrapBailTypes
 } from './ref'
 export {
   reactive,
@@ -19,7 +21,8 @@ export {
   shallowReactive,
   shallowReadonly,
   markRaw,
-  toRaw
+  toRaw,
+  ReactiveFlags
 } from './reactive'
 export {
   computed,
