@@ -1,4 +1,9 @@
-import { toRaw, shallowReactive } from '@vue/reactivity'
+import {
+  toRaw,
+  shallowReactive,
+  trigger,
+  TriggerOpTypes
+} from '@vue/reactivity'
 import {
   EMPTY_OBJ,
   camelize,
@@ -14,7 +19,8 @@ import {
   makeMap,
   isReservedProp,
   EMPTY_ARR,
-  def
+  def,
+  extend
 } from '@vue/shared'
 import { warn } from './warning'
 import {
@@ -52,8 +58,8 @@ type PropConstructor<T = any> =
   | { (): T }
   | PropMethod<T>
 
-type PropMethod<T> = T extends (...args: any) => any // if is function with args
-  ? { new (): T; (): T; readonly proptotype: Function } // Create Function like constructor
+type PropMethod<T, TConstructor = any> = T extends (...args: any) => any // if is function with args
+  ? { new (): TConstructor; (): T; readonly prototype: TConstructor } // Create Function like constructor
   : never
 
 type RequiredKeys<T, MakeDefaultRequired> = {
@@ -184,13 +190,19 @@ export function updateProps(
     for (const key in rawCurrentProps) {
       if (
         !rawProps ||
-        (!hasOwn(rawProps, key) &&
+        (
+          // for camelCase
+          !hasOwn(rawProps, key) &&
           // it's possible the original props was passed in as kebab-case
           // and converted to camelCase (#955)
           ((kebabKey = hyphenate(key)) === key || !hasOwn(rawProps, kebabKey)))
       ) {
         if (options) {
-          if (rawPrevProps && rawPrevProps[kebabKey!] !== undefined) {
+          if (rawPrevProps && (
+            // for camelCase
+            rawPrevProps[key] !== undefined ||
+            // for kebab-case
+            rawPrevProps[kebabKey!] !== undefined)) {
             props[key] = resolvePropValue(
               options,
               rawProps || EMPTY_OBJ,
@@ -213,6 +225,9 @@ export function updateProps(
       }
     }
   }
+
+  // trigger updates for $attrs in case it's used in component slots
+  trigger(instance, TriggerOpTypes.SET, '$attrs')
 
   if (__DEV__ && rawProps) {
     validateProps(props, instance.type)
@@ -275,7 +290,10 @@ function resolvePropValue(
     // default values
     if (hasDefault && value === undefined) {
       const defaultValue = opt.default
-      value = isFunction(defaultValue) ? defaultValue() : defaultValue
+      value =
+        opt.type !== Function && isFunction(defaultValue)
+          ? defaultValue()
+          : defaultValue
     }
     // boolean casting
     if (opt[BooleanFlags.shouldCast]) {
@@ -308,7 +326,7 @@ export function normalizePropsOptions(
   if (__FEATURE_OPTIONS__ && !isFunction(comp)) {
     const extendProps = (raw: ComponentOptions) => {
       const [props, keys] = normalizePropsOptions(raw)
-      Object.assign(normalized, props)
+      extend(normalized, props)
       if (keys) needCastKeys.push(...keys)
     }
     if (comp.extends) {
